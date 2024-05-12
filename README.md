@@ -12,6 +12,9 @@ Our code can easily be adapted to further investigate the usage of parameter-eff
 python3 -m venv env
 source env/bin/activate
 pip install -r requirements.txt
+# some errors on my machine.
+
+conda install pytorch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 pytorch-cuda=11.8 -c pytorch -c nvidia
 mkdir runs
 ```
 We used Python 3.11.5 to run all our experiments, and a single NVIDIA RTX A5000. 
@@ -22,7 +25,7 @@ We used CUDA release 12.3, V12.3.52. Please, make sure the PyTorch version match
 ### Fine-tune an LLM using PEFT
 ```shell
 CUDA_VISIBLE_DEVICES=0 python main.py \
-  --model_name_or_path codellama/CodeLlama-7b-hf \
+  --model_name_or_path Salesforce/codegen-350M-mono \
   --dataset codealpaca \
   --tuning_method lora \
   --num_epochs 5 \
@@ -31,8 +34,9 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
   --learning_rate 3e-4 \
   --lora_r 8 \
   --lora_alpha 16 \
-  --do_train \
-  --use_wandb
+  --do_train 
+
+  # --use_wandb
 ```
 
 - You can also decide to not use WanDB by removing the `use_wandb` argument.
