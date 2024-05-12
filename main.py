@@ -1,7 +1,7 @@
 import argparse
 import logging
 from pathlib import Path
-
+import os
 import torch
 import wandb
 from transformers import set_seed
@@ -76,7 +76,8 @@ if __name__ == "__main__":
             args.run_name = args.model_name
     run_intermediate_path = "checkpoints" if args.do_train else "test_results"
     args.run_dir = Path(f"{args.output_dir}/{run_intermediate_path}/{args.run_name}")
-    args.run_dir.mkdir(exist_ok=True)
+    # args.run_dir.mkdir(exist_ok=True)
+    os.makedirs(args.run_dir, exist_ok=True)
 
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
