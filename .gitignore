@@ -171,3 +171,8 @@ cython_debug/
 runs/
 .DS_Store
 detect_pii/sampled_outputs/
+sstubs_data/msr_sstubs_llms.tar.gz
+sstubs_data/msr_sstubs_llms/
+sstubs_data/._msr_sstubs_llms
+sstubs_data/0.1/train/CHANGE_OPERATOR.jsonl
+sstubs_data/data/
