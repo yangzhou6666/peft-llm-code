@@ -71,6 +71,13 @@ LORA_IA3_TARGET_MODULES = {
 }
 
 
+def trim_code(completion, stop_tokens):
+    for stop_token in stop_tokens:
+        if stop_token in completion:
+            completion = completion[:completion.find(stop_token)]
+    return completion
+
+
 def load_conala_train_dataset():
     datasets = load_dataset("neulab/docprompting-conala")
     datasets = datasets.filter(lambda x: x["nl"] is not None)
