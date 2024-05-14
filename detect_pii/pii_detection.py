@@ -1,7 +1,7 @@
 import json
 from tqdm import tqdm
-from utils.emails_ip_addresses_detection import detect_email_addresses
-from utils.keys_detection import detect_keys
+from detect_pii.utils.emails_ip_addresses_detection import detect_email_addresses
+from detect_pii.utils.keys_detection import detect_keys
 
 
 def postprocess_secrets(secrets):

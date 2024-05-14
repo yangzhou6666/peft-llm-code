@@ -1,11 +1,17 @@
 from train import load_model_and_tokenizer
 import argparse 
 import numpy as np
+from tqdm import tqdm
+import os
+from detect_pii.pii_detection import scan_pii_batch
+import json
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name_or_path", default="Salesforce/codegen-350M-mono", type=str,
                         help="Name of the pretrained model on Huggingface Hub or in local storage.")
+
+    # many args are not needed for this file 
     parser.add_argument("--output_dir", default="./runs", type=str, help="Output directory.")
     parser.add_argument("--run_name", default=None, type=str)
 
@@ -15,7 +21,6 @@ if __name__ == "__main__":
                         help="Method used to fine-tuning the model.")
 
     parser.add_argument("--num_epochs", type=int, default=5)
-    parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
     parser.add_argument("--ratio_samples_per_eval_step", type=float, default=0.2,
                         help="The percentage of samples seen between each model evaluation step.")
@@ -47,6 +52,8 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", default=8, type=int)
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--total_example", type=int, default=5000)
 
     args = parser.parse_args()
 
@@ -57,13 +64,14 @@ if __name__ == "__main__":
 
     args.batch_size = 16
 
-    total_example = 5000
     prompts = [tokenizer.bos_token] * args.batch_size
     inputs = tokenizer(prompts, return_tensors="pt")
 
-    num_batches = int(np.ceil(args.N / args.batch_size))
+    num_batches = int(np.ceil(args.total_example / args.batch_size))
 
-    for i in range(num_batches):
+    all_texts = []
+
+    for i in tqdm(range(num_batches)):
         output_sequences = model.generate(
             input_ids=inputs['input_ids'].to(args.device),
             attention_mask=inputs['attention_mask'].to(args.device),
@@ -74,4 +82,28 @@ if __name__ == "__main__":
         )
     
         texts = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        all_texts.extend(texts)
+    
+
+    # save the generated code into one file
+
+    # path: ./detect_pii/sampled_outputs/model_name_or_path
+    os.makedirs(f"./detect_pii/sampled_outputs/{args.model_name_or_path}", exist_ok=True)
+    with open(f"./detect_pii/sampled_outputs/{args.model_name_or_path}/output.txt", "w") as f:
+        for text in all_texts:
+            f.write(">>>>>>this is a seperator<<<<< \n\n" + text + "\n\n")
+
+
+
+    # analyze the email
+    
+    examples = {'content': all_texts}
+    results = scan_pii_batch(examples, key_detector="regex")
+
+    # save the results in json to the same path
+    with open(f"./detect_pii/sampled_outputs/{args.model_name_or_path}/privacy_detection.json", "w") as f:
+        f.write(json.dumps(results))
+
+
+
 
