@@ -53,7 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--total_example", type=int, default=5000)
+    parser.add_argument("--total_example", type=int, default=1000)
 
     args = parser.parse_args()
 
@@ -61,8 +61,6 @@ if __name__ == "__main__":
 
     model.to(args.device)
     model.eval()
-
-    args.batch_size = 16
 
     prompts = [tokenizer.bos_token] * args.batch_size
     inputs = tokenizer(prompts, return_tensors="pt")
