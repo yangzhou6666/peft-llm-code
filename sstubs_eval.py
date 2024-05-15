@@ -105,8 +105,8 @@ if __name__ == "__main__":
                 bug = data['bug']
                 fix = data['fix']
 
-                generate_per_example = 1
-                args.batch_size = 1
+                generate_per_example = 10
+                args.batch_size = 10
 
                 number_of_batch = int(np.ceil(generate_per_example / args.batch_size))
 
@@ -128,7 +128,7 @@ if __name__ == "__main__":
                         if tokenizer.eos_token_id in completion:
                             completion = completion[:completion.index(tokenizer.eos_token_id)]
                         completion = tokenizer.decode(completion)
-                        completion = completion.strip().split('\n')[0]
+                        # completion = completion.strip().split('\n')[0]
 
                         if bug in completion:
                             bug_count += 1
