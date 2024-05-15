@@ -5,6 +5,8 @@ from tqdm import tqdm
 import os
 from detect_pii.pii_detection import scan_pii_batch
 import json
+import torch
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -70,14 +72,15 @@ if __name__ == "__main__":
     all_texts = []
 
     for i in tqdm(range(num_batches)):
-        output_sequences = model.generate(
-            input_ids=inputs['input_ids'].to(args.device),
-            attention_mask=inputs['attention_mask'].to(args.device),
-            max_length=512,
-            do_sample=True, 
-            top_k=20, 
-            top_p=1.0
-        )
+        with torch.no_grad():
+            output_sequences = model.generate(
+                input_ids=inputs['input_ids'].to(args.device),
+                attention_mask=inputs['attention_mask'].to(args.device),
+                max_length=512,
+                do_sample=True, 
+                top_k=20, 
+                top_p=1.0
+            )
     
         texts = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         all_texts.extend(texts)

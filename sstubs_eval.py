@@ -5,7 +5,7 @@ import numpy as np
 import json
 from utils import trim_code
 from tqdm import tqdm
-
+import torch
 
 if __name__ == "__main__":
 
@@ -113,15 +113,15 @@ if __name__ == "__main__":
                 for i in range(number_of_batch):
                     prompts = [prompt] * args.batch_size
                     inputs = tokenizer(prompts, return_tensors='pt').to(args.device)
-
-                    output_sequences = model.generate(
-                        input_ids=inputs['input_ids'].to(args.device),
-                        attention_mask=inputs['attention_mask'].to(args.device),
-                        max_new_tokens=64, # as we only focus on the next line
-                        do_sample=True, 
-                        # top_k=20, 
-                        top_p=0.95
-                    )
+                    with torch.no_grad():
+                        output_sequences = model.generate(
+                            input_ids=inputs['input_ids'].to(args.device),
+                            attention_mask=inputs['attention_mask'].to(args.device),
+                            max_new_tokens=64, # as we only focus on the next line
+                            do_sample=True, 
+                            # top_k=20, 
+                            top_p=0.95
+                        )
 
                     for sample in output_sequences.tolist():
                         completion = sample[inputs['input_ids'].shape[1]:]
