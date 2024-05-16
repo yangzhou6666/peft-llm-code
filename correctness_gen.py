@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument("--num_workers", default=8, type=int)
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--batch_size", type=int, default=10)
+    parser.add_argument("--batch_size", type=int, default=50)
     parser.add_argument("--total_example", type=int, default=1000)
     parser.add_argument("--num_samples", type=int, default=100)
 
@@ -70,24 +70,22 @@ if __name__ == '__main__':
     
     # load humaneval dataset
     path_to_humaneval = "correctness_eval/human_eval"
-    save_dir = f"correctness_eval/results/{args.model_name_or_path}"
+    save_dir = f"correctness_eval/results/{args.model_name_or_path}/generation/"
     os.makedirs(save_dir, exist_ok=True)
 
     # copy the files in path_to_humaneval to save_dir, using copytree
     # overwrite if save_dir already exists
     shutil.copytree(path_to_humaneval, save_dir, dirs_exist_ok=True)
 
-    for filename in tqdm(sorted(os.listdir(path_to_humaneval))):
-        with open(os.path.join(path_to_humaneval, filename), "r") as f:
+    for filename in tqdm(sorted(os.listdir(save_dir))):
+        with open(os.path.join(save_dir, filename), "r") as f:
             # this is a yaml file
             data = yaml.load(f, Loader=yaml.FullLoader)
             # properties: name, langauge, prompt, tests, completions, stop_tokens
-
             prompt = data["prompt"]
-
             inputs = tokenizer(prompt, return_tensors='pt').to(args.device)
 
-            for i in range(1): #args.num_samples // args.batch_size
+            for i in range(args.num_samples // args.batch_size): 
                 with torch.no_grad():
                     samples = model.generate(
                         **inputs,
@@ -101,19 +99,23 @@ if __name__ == '__main__':
                         use_cache=True
                     )
 
-            for sample in samples.tolist():
-                completion = sample[inputs['input_ids'].shape[1]:]
-                if tokenizer.eos_token_id in completion:
-                    completion = completion[:completion.index(tokenizer.eos_token_id)]
-                completion = tokenizer.decode(completion)
-                completion = trim_code(completion, data["stop_tokens"])
+                for sample in samples.tolist():
+                    completion = sample[inputs['input_ids'].shape[1]:]
+                    if tokenizer.eos_token_id in completion:
+                        completion = completion[:completion.index(tokenizer.eos_token_id)]
+                    completion = tokenizer.decode(completion)
+                    completion = trim_code(completion, data["stop_tokens"])
 
-                data["completions"].append(completion)
+                    data["completions"].append(completion)
             
             # save the data back to the file in save_dir
             with open(os.path.join(save_dir, filename), "w") as f:
                 # save as yaml file, using double quotes
-                yaml.dump(data, f, default_style='"', allow_unicode=True)
+                yaml.dump(data, f, default_flow_style=False, allow_unicode=False, width=float("inf"))
+                # notice an interesting bug (fixed)
+                # the yaml file will automatically add a line breaker after certain number of characters
+                # then, when you try to execute the code in the yaml file, it will raise many python syntax errors
+                # set width=float("inf") to avoid this issue
 
 
 
