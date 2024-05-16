@@ -12,6 +12,8 @@ import shutil
 import tempfile
 from pathlib import Path
 import subprocess
+import multiprocessing
+import concurrent.futures
 
 def execute_script(path: Path):
     output = None
@@ -50,33 +52,44 @@ def evaluate_problem(problem_yaml_path: str, max_workers: int):
             # no completion at all
             return None
 
-        # test_results_path = get_test_results_yaml_path(problem_yaml_path)
-
         test_results = {
             "name": problem["name"],
             "language": problem["language"],
             "results": [],
         }
 
-        num_problems = len(problem["completions"])
-        for completion in problem["completions"]:
-            program = problem["prompt"] + completion + "\n" + problem["tests"]
-            
-            with tempfile.NamedTemporaryFile(suffix='.py', delete=True) as f:
-                f.write(program.encode("utf-8"))
-                f.flush()
-                result = execute_script(Path(f.name))
-                result["program"] = program
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # futures map to track which program each future is processing
+            futures = []
+            for completion in problem["completions"]:
+                program = problem["prompt"] + completion + "\n" + problem["tests"]
+                # Create a temporary file
+                temp_file = tempfile.NamedTemporaryFile(suffix='.py', delete=False)  # Manually control deletion
+                try:
+                    temp_file.write(program.encode("utf-8"))
+                    temp_file.flush()
+                    temp_file_path = Path(temp_file.name)
+                    # Submit the execution to the executor
+                    future = executor.submit(execute_script, temp_file_path)
+                    futures.append((future, temp_file_path, program))
+                finally:
+                    temp_file.close()
 
+            # Collect results and delete temporary files
+            for future, temp_file_path, program in futures:
+                result = future.result()
+                result["program"] = program
                 test_results["results"].append(result)
-        
+                temp_file_path.unlink()  # Manually delete the file
+
         return test_results
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name_or_path", default="Salesforce/codegen-350M-mono", type=str,
                         help="Name of the pretrained model on Huggingface Hub or in local storage.")
-    parser.add_argument("--max_workers", type=int, default=50)
+    parser.add_argument("--max_workers", type=int, default=25)
 
 
     args = parser.parse_args()
@@ -88,7 +101,7 @@ if __name__ == '__main__':
     os.makedirs(result_dir, exist_ok=True)
 
     for filename in tqdm(sorted(os.listdir(generation_dir))):
-        results = evaluate_problem(problem_yaml_path=os.path.join(generation_dir, filename), max_workers=5)
+        results = evaluate_problem(problem_yaml_path=os.path.join(generation_dir, filename), max_workers=args.max_workers)
 
         if results is not None:
             with open(os.path.join(result_dir, filename), "w") as f:
