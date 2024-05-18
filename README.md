@@ -22,10 +22,23 @@ We used CUDA release 12.3, V12.3.52. Please, make sure the PyTorch version match
 
 ## Running the experiments
 
+### Evaluating the original models
+
+```shell
+bash scripts/evaluate_correctness_original_models.sh
+bash scripts/evaluate_privacy_original_model.sh
+bash scripts/evaluate_sstubs_original.sh
+```
+
+Please note that you may need to change the `CUDA_VISIBLE_DEVICES` to run your program on different GPUs.
+
+Before evaluating the sstubs, please switch to `./sstubs_data` and follow the `README.MD` file in that folder to prepare dataset.
+
+
 ### Fine-tune an LLM using PEFT
 ```shell
-CUDA_VISIBLE_DEVICES=0 python main.py \
-  --model_name_or_path Salesforce/codegen-350M-mono \
+CUDA_VISIBLE_DEVICES=3 python main.py \
+  --model_name_or_path Salesforce/codegen-2B-multi \
   --dataset codealpaca \
   --tuning_method lora \
   --num_epochs 5 \
