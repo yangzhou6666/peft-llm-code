@@ -6,7 +6,7 @@ import torch
 import wandb
 from transformers import set_seed
 
-from train import run_train
+from train import run_train, run_train_hotfix
 from test import run_test
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     parser.add_argument("--do_test", action="store_true")
     parser.add_argument("--use_wandb", action="store_true")
     parser.add_argument("--wandb_project_name", default="peft-llm-code", type=str)
-    parser.add_argument("--num_workers", default=8, type=int)
+    parser.add_argument("--num_workers", default=16, type=int)
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--seed", type=int, default=42)
 
@@ -74,6 +74,7 @@ if __name__ == "__main__":
             args.run_name = f"{args.model_name}_joint"
         else:
             args.run_name = args.model_name
+    
     run_intermediate_path = "checkpoints" if args.do_train else "test_results"
     args.run_dir = Path(f"{args.output_dir}/{run_intermediate_path}/{args.run_name}")
     # args.run_dir.mkdir(exist_ok=True)
@@ -97,9 +98,13 @@ if __name__ == "__main__":
     else:
         args.max_input_length = 64
         args.max_target_length = 128
+    
+
 
     if args.do_train:
         logger.info(f"[Fine-tuning] Model: {args.model_name_or_path} | Dataset: {args.dataset}.")
+        run_train_hotfix(args)
+        exit()
         run_train(args)
 
     if args.do_test:
