@@ -8,6 +8,46 @@ LORA_IA3_TARGET_MODULES = {
         "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
         "ff_modules": ["fc_in", "fc_out"]
     },
+    "codegen-350M-multi": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
+    "codegen-350M-nl": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
+    "codegen-2B-mono": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
+    "codegen-2B-multi": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
+    "codegen-2B-nl": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
+    "codegen-6B-mono": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
+    "codegen-6B-multi": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
+    "codegen-6B-nl": {
+        "target_modules_lora": ["qkv_proj"],
+        "target_modules_ia3": ["qkv_proj", "fc_in", "fc_out"],
+        "ff_modules": ["fc_in", "fc_out"]
+    },
     "codet5p-220m": {
         "target_modules_lora": ["q", "v", "k"],
         "target_modules_ia3": ["q", "v", "k", "wi", "wo"],
@@ -91,6 +131,34 @@ def load_conala_test_dataset():
     return dataset
 
 
+def load_sstubs_train_dataset():
+    paths = [
+        "sstubs_data/data/0.8/train/CHANGE_CALLER_IN_FUNCTION_CALL.jsonl",
+        "sstubs_data/data/0.8/train/LESS_SPECIFIC_IF.jsonl",
+        "sstubs_data/data/0.8/train/CHANGE_IDENTIFIER.jsonl",
+        "sstubs_data/data/0.8/train/CHANGE_NUMERAL.jsonl",
+        "sstubs_data/data/0.8/train/CHANGE_OPERAND.jsonl",
+        "sstubs_data/data/0.8/train/CHANGE_OPERATOR.jsonl",
+        "sstubs_data/data/0.8/train/CHANGE_UNARY_OPERATOR.jsonl",
+        "sstubs_data/data/0.8/train/DIFFERENT_METHOD_SAME_ARGS.jsonl",
+        "sstubs_data/data/0.8/train/MORE_SPECIFIC_IF.jsonl",
+        "sstubs_data/data/0.8/train/OVERLOAD_METHOD_DELETED_ARGS.jsonl",
+        "sstubs_data/data/0.8/train/OVERLOAD_METHOD_MORE_ARGS.jsonl",
+        "sstubs_data/data/0.8/train/SWAP_BOOLEAN_LITERAL.jsonl",
+    ]
+    dataset = load_dataset("json", data_files=paths, split="train")
+    return dataset
+
+def load_sstubs_test_dataset():
+    pass
+
+def load_privacy_train_dataset():
+    pass
+
+def load_privacy_test_dataset():
+    pass
+
+
 def load_codealpaca_train_dataset():
     dataset = load_dataset("antolin/codealpaca-filtered")
     dataset["validation"] = dataset["valid"]
@@ -122,3 +190,8 @@ def load_odex_test_dataset():
     dataset = dataset.filter(lambda example: example["intent"] not in conala["nl"])
 
     return dataset
+
+
+if __name__ == '__main__':
+    # only for testing purposes
+    pass
