@@ -120,54 +120,21 @@ def run_train_hotfix(args):
     # load models
     model, tokenizer = load_model_and_tokenizer(args)
 
-
-    exit()
-    # Load dataset
-    if args.dataset == "joint":
-        dataset = load_conala_train_dataset()
-        codealpaca = load_codealpaca_train_dataset()
-        dataset["train"] = concatenate_datasets([dataset["train"], codealpaca["train"]])
-        dataset["validation"] = concatenate_datasets([dataset["validation"], codealpaca["validation"]])
-        dataset.shuffle(args.seed)
-    else:
-        dataset_loading_func = globals().get(f"load_{args.dataset}_train_dataset")
-        dataset = dataset_loading_func()
-
-    intent_column = "nl" # prompt to show intent
-    code_column = "cmd" # the python commands that serve as the target
-    print(dataset["train"], dataset["validation"])
-
-    for example in dataset["train"].select(range(3)):
-        print(f"### Instruction:\n{example[intent_column]}\n### Response:\n{example[code_column]}")
-        print("=" * 100)
-
-    # load model and tokenizer
-    model, tokenizer = load_model_and_tokenizer(args)
-
     def preprocess_function(example):
         """
-        # we tokenize, pad and truncate the samples in the following way:
-        #   <pad><pad>...### Instruction:\n<intent>\n### Answer:\n<snippet><eos>
-        #
-        #   - prompt tokens `<pad><pad>...<intent + \n>` are ignored in the computation of the loss (-100 labels)
-        #   - `<eos>` delimits the snippet and allows the model to have more focused predictions at inference
+        TODO: document this function
         """
-        tokenized_target = tokenizer(example[code_column],
-                                     max_length=args.max_target_length - 1,
+
+        # tokenize the target
+        model_inputs = tokenizer(example["func_src_after"],
+                                     max_length=512 - 1,
                                      truncation=True,
                                      # incoder adds eos token before the start of a sequence -> ignore
-                                     add_special_tokens=False)
-        tokenized_target["input_ids"] = tokenized_target["input_ids"] + [tokenizer.eos_token_id]
-        tokenized_target["attention_mask"] = tokenized_target["attention_mask"] + [1]
-
-        prompt = "### Instruction:\n" + example[intent_column] + "\n### Response:\n"
-        max_prompt_len = (args.max_input_length + args.max_target_length) - \
-                         len(tokenized_target["input_ids"])
-        model_inputs = tokenizer(prompt, max_length=max_prompt_len,  padding="max_length", truncation=True)
-
-        model_inputs["labels"] = [-100] * len(model_inputs["input_ids"]) + tokenized_target["input_ids"]
-        model_inputs["input_ids"] = model_inputs["input_ids"] + tokenized_target["input_ids"]
-        model_inputs["attention_mask"] = model_inputs["attention_mask"] + tokenized_target["attention_mask"]
+                                     add_special_tokens=False,
+                                     padding="max_length")
+        model_inputs["input_ids"] = model_inputs["input_ids"] + [tokenizer.eos_token_id]
+        model_inputs["attention_mask"] = model_inputs["attention_mask"] + [1]
+        model_inputs["labels"] = model_inputs["input_ids"]
 
         return model_inputs
 
@@ -181,14 +148,23 @@ def run_train_hotfix(args):
 
         return model_inputs
 
+    intent_column = "nl" # prompt to show intent
+    code_column = "cmd" # the python commands that serve as the target
+
+
+    # load model and tokenizer
+    model, tokenizer = load_model_and_tokenizer(args)
+
+
     tokenize_fn = preprocess_function_seq2seq if "codet5" in args.model_name_or_path else preprocess_function
-    
+
     dataset = dataset.map(tokenize_fn,
                           num_proc=args.num_workers,
-                          remove_columns=dataset["train"].column_names,
+                          remove_columns=dataset.column_names,
                           desc="Generating samples features.")
 
-    n_samples = len(dataset["train"])
+    dataset = dataset.shuffle(seed=42)
+    n_samples = len(dataset)
     n_samples_per_step = args.batch_size * args.num_gpus * args.gradient_accumulation_steps
     eval_steps = math.ceil((n_samples // n_samples_per_step) * args.ratio_samples_per_eval_step)
 
@@ -215,8 +191,8 @@ def run_train_hotfix(args):
     trainer = trainer_cls(
         model=model,
         args=training_args,
-        train_dataset=dataset["train"],
-        eval_dataset=dataset["validation"],
+        train_dataset=dataset,
+        eval_dataset=dataset,
         tokenizer=tokenizer,
         data_collator=default_data_collator,
     )
@@ -224,6 +200,8 @@ def run_train_hotfix(args):
     eval_results = trainer.evaluate()
     logger.info(f"Evaluation loss before training: {round(eval_results['eval_loss'], 4)}")
     trainer.train()
+
+    exit()
 
 
 
@@ -292,6 +270,8 @@ def run_train(args):
                           remove_columns=dataset["train"].column_names,
                           desc="Generating samples features.")
 
+    exit()
+
     n_samples = len(dataset["train"])
     n_samples_per_step = args.batch_size * args.num_gpus * args.gradient_accumulation_steps
     eval_steps = math.ceil((n_samples // n_samples_per_step) * args.ratio_samples_per_eval_step)
@@ -320,7 +300,7 @@ def run_train(args):
         model=model,
         args=training_args,
         train_dataset=dataset["train"],
-        eval_dataset=dataset["validation"],
+        # eval_dataset=dataset["validation"],
         tokenizer=tokenizer,
         data_collator=default_data_collator,
     )
