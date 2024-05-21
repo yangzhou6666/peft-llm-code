@@ -54,9 +54,10 @@ if __name__ == "__main__":
     parser.add_argument("--do_test", action="store_true")
     parser.add_argument("--use_wandb", action="store_true")
     parser.add_argument("--wandb_project_name", default="peft-llm-code", type=str)
-    parser.add_argument("--num_workers", default=16, type=int)
+    parser.add_argument("--num_workers", default=64, type=int)
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--loss_mode", type=str, default="learn_fix")
 
     args = parser.parse_args()
     set_seed(args.seed)
@@ -75,8 +76,12 @@ if __name__ == "__main__":
         else:
             args.run_name = args.model_name
     
+    if args.loss_mode not in ["learn_fix", "unlearn_buggy", "combine", "enhance_correctness"]:
+        raise ValueError(f"Invalid loss mode: {args.loss_mode}")
+    
+
     run_intermediate_path = "checkpoints" if args.do_train else "test_results"
-    args.run_dir = Path(f"{args.output_dir}/{run_intermediate_path}/{args.run_name}")
+    args.run_dir = Path(f"{args.output_dir}/{run_intermediate_path}/{args.loss_mode}/{args.run_name}")
     # args.run_dir.mkdir(exist_ok=True)
     os.makedirs(args.run_dir, exist_ok=True)
 

@@ -28,6 +28,23 @@ from utils import *
 
 logger = logging.getLogger(__name__)
 
+class UpdateTrainer(Trainer):
+    pass
+
+
+
+class UnlearnBuggyTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # conduct gradient ascent
+        if return_outputs:
+            loss, output = super().compute_loss(model, inputs, return_outputs)
+        else:
+            loss = super().compute_loss(model, inputs, return_outputs)
+
+        return (-loss, output) if return_outputs else -loss
+
+
+
 
 class SaveBestModelCallback(TrainerCallback):
     def __init__(self, trainer, eval_steps):
@@ -120,13 +137,14 @@ def run_train_hotfix(args):
     # load models
     model, tokenizer = load_model_and_tokenizer(args)
 
-    def preprocess_function(example):
+    def preprocess_function(example, loss_mode="learn_fix"):
         """
         TODO: document this function
         """
 
+        data_type = "func_src_after" if loss_mode == "learn_fix" else "func_src_before"
         # tokenize the target
-        model_inputs = tokenizer(example["func_src_after"],
+        model_inputs = tokenizer(example[data_type],
                                      max_length=512 - 1,
                                      truncation=True,
                                      # incoder adds eos token before the start of a sequence -> ignore
@@ -187,7 +205,15 @@ def run_train_hotfix(args):
         fp16=True,
         report_to=["wandb"] if args.use_wandb else ["none"]
     )
-    trainer_cls = Seq2SeqTrainer if "codet5" in args.model_name_or_path else Trainer
+
+    if args.loss_mode == "learn_fix":
+        trainer_cls = Seq2SeqTrainer if "codet5" in args.model_name_or_path else Trainer
+    elif args.loss_mode == "unlearn_buggy":
+        trainer_cls = UnlearnBuggyTrainer
+    else:
+        raise ValueError(f"Invalid loss mode: {args.loss_mode}")
+
+
     trainer = trainer_cls(
         model=model,
         args=training_args,
