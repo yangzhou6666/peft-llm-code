@@ -98,6 +98,23 @@ class LearnAddedTrainer(Trainer):
         
         return (loss, output) if return_outputs else loss
 
+class LearnAllAfterTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # change the labels, if not changed, set as -100
+
+        new_inputs = {}
+        # new_inputs["labels"] = torch.where(inputs["add_weights"] == 0, -100, inputs["labels"])
+        new_inputs["labels"] = inputs["labels"]
+        new_inputs["input_ids"] = inputs["input_ids"]
+        new_inputs["attention_mask"] = inputs["attention_mask"]
+
+        if return_outputs:
+            loss, output = super().compute_loss(model, new_inputs, return_outputs)
+        else:
+            loss = super().compute_loss(model, new_inputs, return_outputs)
+        
+        return (loss, output) if return_outputs else loss
+
 
 class SaveBestModelCallback(TrainerCallback):
     def __init__(self, trainer, eval_steps):
@@ -374,6 +391,8 @@ def run_train_hotfix(args):
         trainer_cls = UpdateTrainer
     elif args.loss_mode == "learn_added":
         trainer_cls = LearnAddedTrainer
+    elif args.loss_mode == "all_after":
+        trainer_cls = LearnAllAfterTrainer
     else:
         raise ValueError(f"Invalid loss mode: {args.loss_mode}")
 
