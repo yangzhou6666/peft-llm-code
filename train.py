@@ -1,6 +1,6 @@
 import logging
 import math
-
+import copy
 import torch
 # import wandb
 from datasets import concatenate_datasets
@@ -29,17 +29,56 @@ from utils import *
 logger = logging.getLogger(__name__)
 
 class UpdateTrainer(Trainer):
-    pass
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # inputs has two keys: "func_src_before" and "func_src_after"
+        # we need to compute the loss for both
+
+        # get the input for buggy code
+        inputs_before = {}
+        inputs_after = {}
+        
+        inputs_before["input_ids"] = inputs["input_ids_before"] 
+        inputs_before["attention_mask"] = inputs["attention_mask_before"]
+        inputs_before["labels"] = inputs["labels_before"]
+
+        # get the input for fixed code
+        inputs_after["input_ids"] = inputs["input_ids"]
+        inputs_after["attention_mask"] = inputs["attention_mask"]
+        inputs_after["labels"] = inputs["labels"]
+
+        
+        if return_outputs:
+            loss_before, output_before = super().compute_loss(model, inputs_before, return_outputs)
+            loss_after, output_after = super().compute_loss(model, inputs_after, return_outputs)
+            # for func_src_before, we do gradient ascent
+            # for func_src_after, we do gradient descent
+
+            
+
+            return (2*loss_after - loss_before, output_after) if return_outputs else 2*loss_after - loss_before
+
+        else:
+            loss_before = super().compute_loss(model, inputs_before, return_outputs)
+            loss_after = super().compute_loss(model, inputs_after, return_outputs)
+
+            return 2*loss_after - loss_before
+
 
 
 
 class UnlearnBuggyTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
-        # conduct gradient ascent
+        # get the input for buggy code
+        inputs_buggy = {}
+        inputs_buggy["input_ids"] = inputs["input_ids_before"] 
+        inputs_buggy["attention_mask"] = inputs["attention_mask_before"]
+        inputs_buggy["labels"] = inputs["labels_before"]
+
+
         if return_outputs:
-            loss, output = super().compute_loss(model, inputs, return_outputs)
+            loss, output = super().compute_loss(model, inputs_buggy, return_outputs)
         else:
-            loss = super().compute_loss(model, inputs, return_outputs)
+            loss = super().compute_loss(model, inputs_buggy, return_outputs)
 
         return (-loss, output) if return_outputs else -loss
 
@@ -129,32 +168,117 @@ def load_model_and_tokenizer(args):
 
 def run_train_hotfix(args):
     # load datasets
-    # TODO: now just one file for one bug type, need to combine multiple bug types when running
     dataset = load_sstubs_train_dataset()
+    
+    dataset = dataset.select(range(10)) # REMEBER TO REMOVE THIS, only for testing purposes
     intent_column = "sub_condition" # prompt to show intent
     code_column = "fix" # the python commands that serve as the target
 
     # load models
+    global tokenizer 
     model, tokenizer = load_model_and_tokenizer(args)
 
-    def preprocess_function(example, loss_mode="learn_fix"):
+    def preprocess_function(example):
         """
         TODO: document this function
         """
+        # KEYS in example: line_changes, char_changes, func_src_after, func_src_before
 
-        data_type = "func_src_after" if loss_mode == "learn_fix" else "func_src_before"
+        data_to_return = {}
+        code_after = example["func_src_after"]
+        tokenized_code_after = tokenizer.encode_plus(
+            code_after,
+            max_length=512,
+            truncation=True,
+            add_special_tokens=False,
+            padding="max_length")
+        tokens_after = tokenized_code_after['input_ids'] # input_ids
+
+        # if len(tokens_after) > 512:
+        #     return None
+
+        add_weights = [0] * len(tokens_after)
+        # 没修改的地方设置0，修改的地方设置1
+        # 现在找到修改的地方
+        # this is after, we need to find added parts
+        for change in example["char_changes"]["added"]:
+            try:
+                char_start = change["char_start"]
+                char_start_idx = tokenized_code_after.char_to_token(char_start)
+                char_end = change["char_end"]
+                char_end_idx = tokenized_code_after.char_to_token(char_end) - 1
+
+                # now we find the tokens that correspond to the added characters
+                for char_idx in range(char_start_idx, char_end_idx+1):
+                    # 这个range就是修改的位置
+                    add_weights[char_idx] = 1 # 将每个修改的位置的权重设置为1
+            except:
+                pass
+
+        data_to_return["input_ids"] = tokenized_code_after.data["input_ids"]
+        data_to_return["attention_mask"] = tokenized_code_after["attention_mask"]
+        data_to_return["add_weights"] = add_weights
+        data_to_return["labels"] = tokenized_code_after["input_ids"]
+
+        code_before = example["func_src_before"]
+        tokenized_code_before = tokenizer.encode_plus(
+            code_before,
+            max_length=512,
+            truncation=True,
+            add_special_tokens=False,
+            padding="max_length")
+
+        tokens_before = tokenized_code_before['input_ids']
+        # if len(tokens_before) > 512:
+        #     return None
+
+        delete_weights = [0] * len(tokens_before)
+        # 没修改的地方设置0，修改的地方设置1
+        # 现在找到修改的地方
+        # this is after, we need to find deleted parts
+        for change in example["char_changes"]["deleted"]:
+            try:
+                char_start = change["char_start"]
+                char_start_idx = tokenized_code_before.char_to_token(char_start)
+                char_end = change["char_end"]
+                char_end_idx = tokenized_code_before.char_to_token(char_end) - 1
+
+                # now we find the tokens that correspond to the added characters
+                for char_idx in range(char_start_idx, char_end_idx+1):
+                    # 这个range就是修改的位置
+                    delete_weights[char_idx] = 1
+            except:
+                # this change is not in the tokenized part
+                pass
+        
+        data_to_return["delete_weights"] = delete_weights
+
+        data_to_return["input_ids_before"] = tokenized_code_before["input_ids"] 
+        data_to_return["attention_mask_before"] = tokenized_code_before["attention_mask"] 
+        data_to_return["labels_before"] = tokenized_code_before["input_ids"]
+
+        return data_to_return
+
+    def preprocess_function_buggy_fixed(example):
+        
+        data_type = "func_src_before"
+
         # tokenize the target
         model_inputs = tokenizer(example[data_type],
-                                     max_length=512 - 1,
-                                     truncation=True,
-                                     # incoder adds eos token before the start of a sequence -> ignore
-                                     add_special_tokens=False,
-                                     padding="max_length")
+                                    max_length=512 - 1,
+                                    truncation=True,
+                                    add_special_tokens=False,
+                                    padding="max_length")
+
+
+
         model_inputs["input_ids"] = model_inputs["input_ids"] + [tokenizer.eos_token_id]
         model_inputs["attention_mask"] = model_inputs["attention_mask"] + [1]
         model_inputs["labels"] = model_inputs["input_ids"]
 
+
         return model_inputs
+
 
     def preprocess_function_seq2seq(example):
         prompt = "Generate Python code: ### Instruction:\n" + example[intent_column] + "\n### Response:\n"
@@ -174,14 +298,35 @@ def run_train_hotfix(args):
     model, tokenizer = load_model_and_tokenizer(args)
 
 
-    tokenize_fn = preprocess_function_seq2seq if "codet5" in args.model_name_or_path else preprocess_function
+    # tokenize_fn = preprocess_function_seq2seq if "codet5" in args.model_name_or_path else preprocess_function
 
+    tokenize_fn = preprocess_function
+    columns_to_remove = ['func_name', 'func_src_before', 'func_src_after', 'line_changes', 'char_changes', 'commit_link', 'bug_type', 'vul_type', 'repository_url', 'sub_condition', 'condition', 'bug', 'fix']
     dataset = dataset.map(tokenize_fn,
-                          num_proc=args.num_workers,
-                          remove_columns=dataset.column_names,
-                          desc="Generating samples features.")
+                            num_proc=args.num_workers,
+                            desc="Generating samples features.")   
+
+    dataset = dataset.remove_columns(columns_to_remove)
+
+    # print(dataset[0])
+    # print(dataset[0].keys())
+    # exit()
+    # if args.loss_mode == "learn_fix":
+    #     dataset = data_buggy_and_fixed["func_src_after"] # to not break the original flow
+    # elif args.loss_mode == "unlearn_buggy":
+    #     dataset = data_buggy_and_fixed["func_src_before"]
+    # elif args.loss_mode == "update":
+    #     dataset = data_buggy_and_fixed
+
+    # dataset = dataset.map(tokenize_fn,
+    #                       num_proc=args.num_workers,
+    #                       remove_columns=dataset.column_names,
+    #                       desc="Generating samples features.")
+
 
     dataset = dataset.shuffle(seed=42)
+
+    
     n_samples = len(dataset)
     n_samples_per_step = args.batch_size * args.num_gpus * args.gradient_accumulation_steps
     eval_steps = math.ceil((n_samples // n_samples_per_step) * args.ratio_samples_per_eval_step)
@@ -203,6 +348,7 @@ def run_train_hotfix(args):
         logging_strategy="steps",
         logging_steps=10,
         fp16=True,
+        remove_unused_columns=False,
         report_to=["wandb"] if args.use_wandb else ["none"]
     )
 
@@ -210,9 +356,12 @@ def run_train_hotfix(args):
         trainer_cls = Seq2SeqTrainer if "codet5" in args.model_name_or_path else Trainer
     elif args.loss_mode == "unlearn_buggy":
         trainer_cls = UnlearnBuggyTrainer
+    elif args.loss_mode == "update":
+        trainer_cls = UpdateTrainer
     else:
         raise ValueError(f"Invalid loss mode: {args.loss_mode}")
 
+    
 
     trainer = trainer_cls(
         model=model,
@@ -221,10 +370,11 @@ def run_train_hotfix(args):
         eval_dataset=dataset,
         tokenizer=tokenizer,
         data_collator=default_data_collator,
+        # data_collator=CustomDataCollator(tokenizer=tokenizer),
     )
     trainer.add_callback(SaveBestModelCallback(trainer, eval_steps))
-    eval_results = trainer.evaluate()
-    logger.info(f"Evaluation loss before training: {round(eval_results['eval_loss'], 4)}")
+    # eval_results = trainer.evaluate()
+    # logger.info(f"Evaluation loss before training: {round(eval_results['eval_loss'], 4)}")
     trainer.train()
 
     exit()
@@ -296,7 +446,7 @@ def run_train(args):
                           remove_columns=dataset["train"].column_names,
                           desc="Generating samples features.")
 
-    exit()
+    # exit()
 
     n_samples = len(dataset["train"])
     n_samples_per_step = args.batch_size * args.num_gpus * args.gradient_accumulation_steps
