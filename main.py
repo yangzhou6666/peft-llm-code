@@ -76,7 +76,7 @@ if __name__ == "__main__":
         else:
             args.run_name = args.model_name
     
-    if args.loss_mode not in ["learn_fix", "unlearn_buggy", "update", "enhance_correctness", "learn_added"]:
+    if args.loss_mode not in ["learn_fix", "unlearn_buggy", "update", "enhance_correctness", "learn_added", "all_after"]:
         raise ValueError(f"Invalid loss mode: {args.loss_mode}")
     
 
