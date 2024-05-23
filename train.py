@@ -82,7 +82,21 @@ class UnlearnBuggyTrainer(Trainer):
 
         return (-loss, output) if return_outputs else -loss
 
+class LearnAddedTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # change the labels, if not changed, set as -100
 
+        new_inputs = {}
+        new_inputs["labels"] = torch.where(inputs["add_weights"] == 0, -100, inputs["labels"])
+        new_inputs["input_ids"] = inputs["input_ids"]
+        new_inputs["attention_mask"] = inputs["attention_mask"]
+
+        if return_outputs:
+            loss, output = super().compute_loss(model, new_inputs, return_outputs)
+        else:
+            loss = super().compute_loss(model, new_inputs, return_outputs)
+        
+        return (loss, output) if return_outputs else loss
 
 
 class SaveBestModelCallback(TrainerCallback):
@@ -170,7 +184,7 @@ def run_train_hotfix(args):
     # load datasets
     dataset = load_sstubs_train_dataset()
     
-    dataset = dataset.select(range(10)) # REMEBER TO REMOVE THIS, only for testing purposes
+    # dataset = dataset.select(range(10)) # REMEBER TO REMOVE THIS, only for testing purposes
     intent_column = "sub_condition" # prompt to show intent
     code_column = "fix" # the python commands that serve as the target
 
@@ -358,6 +372,8 @@ def run_train_hotfix(args):
         trainer_cls = UnlearnBuggyTrainer
     elif args.loss_mode == "update":
         trainer_cls = UpdateTrainer
+    elif args.loss_mode == "learn_added":
+        trainer_cls = LearnAddedTrainer
     else:
         raise ValueError(f"Invalid loss mode: {args.loss_mode}")
 
@@ -367,7 +383,7 @@ def run_train_hotfix(args):
         model=model,
         args=training_args,
         train_dataset=dataset,
-        eval_dataset=dataset,
+        eval_dataset=dataset.select(range(10)),
         tokenizer=tokenizer,
         data_collator=default_data_collator,
         # data_collator=CustomDataCollator(tokenizer=tokenizer),
