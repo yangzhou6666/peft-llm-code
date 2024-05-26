@@ -26,7 +26,7 @@ from transformers import (
 
 from utils import *
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Hotfix")
 
 class UpdateTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
@@ -64,8 +64,6 @@ class UpdateTrainer(Trainer):
             return 2*loss_after - loss_before
 
 
-
-
 class UnlearnBuggyTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
         # get the input for buggy code
@@ -83,6 +81,7 @@ class UnlearnBuggyTrainer(Trainer):
         return (-loss, output) if return_outputs else -loss
 
 class LearnAddedTrainer(Trainer):
+    # 在整个修改后的代码上计算loss
     def compute_loss(self, model, inputs, return_outputs=False):
         # change the labels, if not changed, set as -100
 
@@ -99,11 +98,11 @@ class LearnAddedTrainer(Trainer):
         return (loss, output) if return_outputs else loss
 
 class LearnAllAfterTrainer(Trainer):
+    # 只在添加的部分计算loss
     def compute_loss(self, model, inputs, return_outputs=False):
         # change the labels, if not changed, set as -100
 
         new_inputs = {}
-        # new_inputs["labels"] = torch.where(inputs["add_weights"] == 0, -100, inputs["labels"])
         new_inputs["labels"] = inputs["labels"]
         new_inputs["input_ids"] = inputs["input_ids"]
         new_inputs["attention_mask"] = inputs["attention_mask"]
@@ -115,6 +114,157 @@ class LearnAllAfterTrainer(Trainer):
         
         return (loss, output) if return_outputs else loss
 
+
+class UnlearnDeletedTrainer(Trainer):
+    # maximize the loss on the deleted part
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # change the labels, if not changed, set as -100
+
+        new_inputs = {}
+        # only calculate loss on the deleted part
+        new_inputs["labels"] = torch.where(inputs["delete_weights"] == 0, -100, inputs["labels_before"])
+        new_inputs["input_ids"] = inputs["input_ids_before"]
+        new_inputs["attention_mask"] = inputs["attention_mask_before"]
+
+        if return_outputs:
+            loss, output = super().compute_loss(model, new_inputs, return_outputs)
+        else:
+            loss = super().compute_loss(model, new_inputs, return_outputs)
+        
+        # we want to maximize the loss
+        return (-loss, output) if return_outputs else -loss
+
+class UnlearnAllBeforeTrainer(Trainer):
+    # maximize the loss on the whole original example
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # change the labels, if not changed, set as -100
+
+        new_inputs = {}
+        new_inputs["labels"] = inputs["labels_before"]
+        new_inputs["input_ids"] = inputs["input_ids_before"]
+        new_inputs["attention_mask"] = inputs["attention_mask_before"]
+
+        if return_outputs:
+            loss, output = super().compute_loss(model, new_inputs, return_outputs)
+        else:
+            loss = super().compute_loss(model, new_inputs, return_outputs)
+        
+        # we want to maximize the loss
+        return (-loss, output) if return_outputs else -loss
+
+
+class LearnAddedAndUnlearnDeletedTrainer(Trainer):
+    # minimize loss on added part (learn added) and maximize loss on deleted part (unlearn deleted)
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # change the labels, if not changed, set as -100
+
+        new_inputs = {}
+        new_inputs["labels"] = torch.where(inputs["delete_weights"] == 0, -100, inputs["labels_before"])
+        new_inputs["input_ids"] = inputs["input_ids_before"]
+        new_inputs["attention_mask"] = inputs["attention_mask_before"]
+
+        if return_outputs:
+            loss, output = super().compute_loss(model, new_inputs, return_outputs)
+        else:
+            loss = super().compute_loss(model, new_inputs, return_outputs)
+        
+        # we want to maximize the loss
+        return (-loss, output) if return_outputs else -loss
+
+
+class LearnAddedAndPenalizeDeletedTrainer(Trainer):
+    # minimize loss on added part (learn added)
+    # penalize the loss on deleted part, but now directly maximize the loss, which may drive the model to produce meaningless code
+    def compute_loss(self, model, inputs, return_outputs=False):
+        inputs_before = {}
+        inputs_after = {}
+
+        inputs_before["input_ids"] = inputs["input_ids_before"] 
+        inputs_before["attention_mask"] = inputs["attention_mask_before"]
+        inputs_before["labels"] = torch.where(inputs["delete_weights"] == 0, -100, inputs["labels_before"])
+
+        # get the input for fixed code
+        inputs_after["input_ids"] = inputs["input_ids"]
+        inputs_after["attention_mask"] = inputs["attention_mask"]
+        inputs_after["labels"] = torch.where(inputs["add_weights"] == 0, -100, inputs["labels"])
+
+        if return_outputs:
+            loss_before, output_before = super().compute_loss(model, inputs_before, return_outputs)
+            loss_after, output_after = super().compute_loss(model, inputs_after, return_outputs)
+
+            final_loss = 0.7*loss_after + 0.3*loss_after / (loss_before +  loss_before + 1e-6)
+            # if loss_after decreses (i.e., learn added), both parts will decrease
+            # if loss_before increases (i.e., penalize deleted), the second term will decrease
+            # it means that minimize this final loss will make the model learn added and penalize deleted parts
+            return (final_loss, output_after) if return_outputs else 2*loss_after - loss_before
+        else:
+            loss_before = super().compute_loss(model, inputs_before, return_outputs)
+            loss_after = super().compute_loss(model, inputs_after, return_outputs)
+
+            final_loss = 0.7*loss_after + 0.3*loss_after / (loss_before +  loss_before + 1e-6)
+
+            return final_loss
+
+def enhance_correctness_class(base_class, args):
+    
+    class_name = base_class.__name__ + "EnhancedCorrectness"
+    print(base_class.__name__)
+    def __init__(self, args):
+        # Initialize the base class
+        super(base_class, self).__init__(*args, **kwargs)
+        # load the original model using args.model_name_or_path
+        self.model_original = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+
+    def compute_loss(self, model, inputs, return_outputs=False):     
+        # get the loss from the base class
+        if return_outputs:
+            loss, output = base_class.compute_loss(self, model=model, inputs=inputs, return_outputs=return_outputs)
+        else:
+            loss =  base_class.compute_loss(self, model=model, inputs=inputs, return_outputs=return_outputs)
+        
+        # add the correctness loss (KL divergence) to the original loss
+        # compute the KL divergence between (1) the new model's probability distribution and (2) the original model's probability distribution
+        new_input = {}
+        new_input["input_ids"] = inputs["input_ids"]
+        new_input["attention_mask"] = inputs["attention_mask"]
+        new_input["labels"] = inputs["labels"]
+        
+        # get the logits for the new model
+        model.eval()  # change the model to eval mode
+        with torch.no_grad():
+            outputs = model(**new_input)
+            logits_new = outputs.logits
+            # get the probability distribution
+            probability_new = torch.nn.functional.softmax(logits_new, dim=-1)
+        model.train() # change the model back to train mode
+        
+        # get the logits for the original model
+        self.model_original.eval()  # change the model to eval mode
+        with torch.no_grad():
+            outputs = self.model_original(**new_input)
+            logits_original = outputs.logits
+            # get the probability distribution
+            probability_original = torch.nn.functional.softmax(logits_original, dim=-1)
+        
+        # compute the KL divergence
+        loss_fct = torch.nn.KLDivLoss(log_target=True, reduction='none')
+        kl_loss = loss_fct(probability_new,
+                probability_original)
+        
+        if return_outputs:
+            return (0.7*loss + 0.3*kl_loss, output)
+        else:
+            return 0.7*loss + 0.3*kl_loss
+        
+    
+    class_attributes = {
+        "compute_loss": compute_loss
+    } # add the new attributes to the class
+    
+    # create a new class with the new attributes
+    new_class = type(class_name, (base_class,), class_attributes)
+
+    return new_class
 
 class SaveBestModelCallback(TrainerCallback):
     def __init__(self, trainer, eval_steps):
@@ -383,6 +533,7 @@ def run_train_hotfix(args):
         report_to=["wandb"] if args.use_wandb else ["none"]
     )
 
+    # TODO: may put them into a dictionary
     if args.loss_mode == "learn_fix":
         trainer_cls = Seq2SeqTrainer if "codet5" in args.model_name_or_path else Trainer
     elif args.loss_mode == "unlearn_buggy":
@@ -393,9 +544,20 @@ def run_train_hotfix(args):
         trainer_cls = LearnAddedTrainer
     elif args.loss_mode == "all_after":
         trainer_cls = LearnAllAfterTrainer
+    elif args.loss_mode == "unlearn_deleted":
+        trainer_cls = UnlearnDeletedTrainer
+    elif args.loss_mode == "unlearn_all_before":
+        trainer_cls = UnlearnAllBeforeTrainer
+    elif args.loss_mode == "learn_added_unlearn_deleted":
+        trainer_cls = LearnAddedAndUnlearnDeletedTrainer
+    elif args.loss_mode == "learn_added_penalize_deleted":
+        trainer_cls = LearnAddedAndPenalizeDeletedTrainer
     else:
         raise ValueError(f"Invalid loss mode: {args.loss_mode}")
 
+    if args.enhance_correctness is True:
+        print("Enhancing correctness")
+        trainer_cls = enhance_correctness_class(trainer_cls, args)
     
 
     trainer = trainer_cls(
@@ -405,7 +567,6 @@ def run_train_hotfix(args):
         eval_dataset=dataset.select(range(10)),
         tokenizer=tokenizer,
         data_collator=default_data_collator,
-        # data_collator=CustomDataCollator(tokenizer=tokenizer),
     )
     trainer.add_callback(SaveBestModelCallback(trainer, eval_steps))
     # eval_results = trainer.evaluate()
