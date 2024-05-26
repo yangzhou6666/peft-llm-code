@@ -205,15 +205,16 @@ class LearnAddedAndPenalizeDeletedTrainer(Trainer):
 
             return final_loss
 
-def enhance_correctness_class(base_class, args):
+def enhance_correctness_class(base_class, args_info):
     
     class_name = base_class.__name__ + "EnhancedCorrectness"
     print(base_class.__name__)
-    def __init__(self, args):
+    def __init__(self, *args, **kwargs):
         # Initialize the base class
         super(base_class, self).__init__(*args, **kwargs)
         # load the original model using args.model_name_or_path
-        self.model_original = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+        self.model_original = AutoModelForCausalLM.from_pretrained(args_info.model_name_or_path)
+        self.model_original.to(args_info.device)
 
     def compute_loss(self, model, inputs, return_outputs=False):     
         # get the loss from the base class
@@ -221,6 +222,7 @@ def enhance_correctness_class(base_class, args):
             loss, output = base_class.compute_loss(self, model=model, inputs=inputs, return_outputs=return_outputs)
         else:
             loss =  base_class.compute_loss(self, model=model, inputs=inputs, return_outputs=return_outputs)
+            
         
         # add the correctness loss (KL divergence) to the original loss
         # compute the KL divergence between (1) the new model's probability distribution and (2) the original model's probability distribution
@@ -238,6 +240,7 @@ def enhance_correctness_class(base_class, args):
             probability_new = torch.nn.functional.softmax(logits_new, dim=-1)
         model.train() # change the model back to train mode
         
+        
         # get the logits for the original model
         self.model_original.eval()  # change the model to eval mode
         with torch.no_grad():
@@ -245,11 +248,15 @@ def enhance_correctness_class(base_class, args):
             logits_original = outputs.logits
             # get the probability distribution
             probability_original = torch.nn.functional.softmax(logits_original, dim=-1)
+            
+    
         
         # compute the KL divergence
         loss_fct = torch.nn.KLDivLoss(log_target=True, reduction='none')
         kl_loss = loss_fct(probability_new,
                 probability_original)
+        
+        kl_loss = kl_loss.sum(dim=1).mean()
         
         if return_outputs:
             return (0.7*loss + 0.3*kl_loss, output)
@@ -258,7 +265,8 @@ def enhance_correctness_class(base_class, args):
         
     
     class_attributes = {
-        "compute_loss": compute_loss
+        "compute_loss": compute_loss,
+        "__init__": __init__
     } # add the new attributes to the class
     
     # create a new class with the new attributes
