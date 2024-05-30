@@ -1,6 +1,7 @@
 import os
 import argparse 
-from train import load_model_and_tokenizer
+from test import load_model_and_tokenizer
+
 import numpy as np
 import json
 from utils import trim_code
@@ -151,10 +152,11 @@ if __name__ == "__main__":
 
     # path: sstubs_data/results/eval_type/model_name_or_path
 
-    if 'runs' in args.model_name_or_path:
-        # the path will be like runs/checkpoints/sstubs/codegen-350M-mono_lora
+    if args.adapter_path is not None:
+        # the path will be like adapters/adapter-0
         # get the model name
-        args.model_name_or_path = args.model_name_or_path.split('runs/checkpoints/')[-1]
+        args.model_name_or_path = args.adapter_path.split('runs/checkpoints/')[-1]
+
 
 
     os.makedirs(f"./sstubs_data/results/{eval_type}/{args.model_name_or_path}", exist_ok=True)
