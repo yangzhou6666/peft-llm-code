@@ -1,4 +1,4 @@
-from train import load_model_and_tokenizer
+from test import load_model_and_tokenizer
 import argparse 
 import numpy as np
 from tqdm import tqdm
