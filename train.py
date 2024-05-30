@@ -358,6 +358,7 @@ def load_model_and_tokenizer(args):
 def run_train_hotfix(args):
     # load datasets
     dataset = load_sstubs_train_dataset()
+    dataset_val = load_sstubs_valid_dataset()
     
     # dataset = dataset.select(range(10)) # REMEBER TO REMOVE THIS, only for testing purposes
     intent_column = "sub_condition" # prompt to show intent
@@ -496,6 +497,10 @@ def run_train_hotfix(args):
                             desc="Generating samples features.")   
 
     dataset = dataset.remove_columns(columns_to_remove)
+    dataset_val = dataset_val.map(tokenize_fn,
+                            num_proc=args.num_workers,
+                            desc="Generating samples features.")   
+    dataset_val = dataset_val.remove_columns(columns_to_remove)
 
     # print(dataset[0])
     # print(dataset[0].keys())
@@ -572,13 +577,13 @@ def run_train_hotfix(args):
         model=model,
         args=training_args,
         train_dataset=dataset,
-        eval_dataset=dataset.select(range(10)),
+        eval_dataset=dataset_val,
         tokenizer=tokenizer,
         data_collator=default_data_collator,
     )
     trainer.add_callback(SaveBestModelCallback(trainer, eval_steps))
-    # eval_results = trainer.evaluate()
-    # logger.info(f"Evaluation loss before training: {round(eval_results['eval_loss'], 4)}")
+    eval_results = trainer.evaluate()
+    logger.info(f"Evaluation loss before training: {round(eval_results['eval_loss'], 4)}")
     trainer.train()
 
     exit()
