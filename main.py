@@ -9,7 +9,7 @@ from transformers import set_seed
 from train import run_train, run_train_hotfix
 from test import run_test
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Hotfix")
 
 
 if __name__ == "__main__":
@@ -58,6 +58,8 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--loss_mode", type=str, default="learn_fix")
+    parser.add_argument("--enhance_correctness", type=bool, default=False)
+
 
     args = parser.parse_args()
     set_seed(args.seed)
@@ -76,22 +78,29 @@ if __name__ == "__main__":
         else:
             args.run_name = args.model_name
     
-    if args.loss_mode not in ["learn_fix", "unlearn_buggy", "update", "enhance_correctness", "learn_added", "all_after"]:
-        raise ValueError(f"Invalid loss mode: {args.loss_mode}")
+
+    # ensure that the loss mode is supported
+    supported_loss_modes = ["learn_fix", "unlearn_buggy", "update", "enhance_correctness", "learn_added", "all_after", "unlearn_deleted", "unlearn_all_before", "learn_added_unlearn_deleted", "learn_added_penalize_deleted"]
+    
+    assert args.loss_mode in supported_loss_modes, f"Loss mode {args.loss_mode} not supported. Supported loss modes: {supported_loss_modes}."
     
 
     run_intermediate_path = "checkpoints" if args.do_train else "test_results"
     args.run_dir = Path(f"{args.output_dir}/{run_intermediate_path}/{args.loss_mode}/{args.run_name}")
+    if args.enhance_correctness:
+        args.run_dir = Path(f"{args.output_dir}/{run_intermediate_path}/{args.loss_mode}-enhance_correctness/{args.run_name}")
     # args.run_dir.mkdir(exist_ok=True)
     os.makedirs(args.run_dir, exist_ok=True)
 
+    file_handler = logging.FileHandler(os.path.join(args.run_dir, "log.txt"))
+    
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
-        handlers=[logging.StreamHandler()],
+        handlers=[file_handler],
     )
-
+    # [os.path.join(args.run_dir, "log.txt")]
     if args.use_wandb:
         wandb.init(project=args.wandb_project_name,
                    name=args.run_name,
@@ -104,7 +113,6 @@ if __name__ == "__main__":
         args.max_input_length = 64
         args.max_target_length = 128
     
-
 
     if args.do_train:
         logger.info(f"[Fine-tuning] Model: {args.model_name_or_path} | Dataset: {args.dataset}.")
