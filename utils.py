@@ -149,6 +149,24 @@ def load_sstubs_train_dataset():
     dataset = load_dataset("json", data_files=paths, split="train")
     return dataset
 
+def load_sstubs_valid_dataset():
+    paths = [
+        "sstubs_data/data/0.8/val/CHANGE_CALLER_IN_FUNCTION_CALL.jsonl",
+        "sstubs_data/data/0.8/val/LESS_SPECIFIC_IF.jsonl",
+        "sstubs_data/data/0.8/val/CHANGE_IDENTIFIER.jsonl",
+        "sstubs_data/data/0.8/val/CHANGE_NUMERAL.jsonl",
+        "sstubs_data/data/0.8/val/CHANGE_OPERAND.jsonl",
+        "sstubs_data/data/0.8/val/CHANGE_OPERATOR.jsonl",
+        "sstubs_data/data/0.8/val/CHANGE_UNARY_OPERATOR.jsonl",
+        "sstubs_data/data/0.8/val/DIFFERENT_METHOD_SAME_ARGS.jsonl",
+        "sstubs_data/data/0.8/val/MORE_SPECIFIC_IF.jsonl",
+        "sstubs_data/data/0.8/val/OVERLOAD_METHOD_DELETED_ARGS.jsonl",
+        "sstubs_data/data/0.8/val/OVERLOAD_METHOD_MORE_ARGS.jsonl",
+        "sstubs_data/data/0.8/val/SWAP_BOOLEAN_LITERAL.jsonl",
+    ]
+    dataset = load_dataset("json", data_files=paths, split="train")
+    return dataset
+
 def load_sstubs_test_dataset():
     pass
 
