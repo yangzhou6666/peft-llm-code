@@ -1,5 +1,5 @@
 import os
-from train import load_model_and_tokenizer
+from test import load_model_and_tokenizer
 import argparse 
 import numpy as np
 from tqdm import tqdm
@@ -9,6 +9,7 @@ import yaml
 import torch
 from utils import trim_code
 import shutil
+from pathlib import Path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -59,6 +60,8 @@ if __name__ == '__main__':
     parser.add_argument("--batch_size", type=int, default=50)
     parser.add_argument("--total_example", type=int, default=1000)
     parser.add_argument("--num_samples", type=int, default=100)
+    parser.add_argument("--enhance_correctness", type=bool, default=False)
+    parser.add_argument("--loss_mode", type=str, default="learn_fix")
 
     args = parser.parse_args()
 
@@ -70,7 +73,21 @@ if __name__ == '__main__':
     
     # load humaneval dataset
     path_to_humaneval = "correctness_eval/human_eval"
-    save_dir = f"correctness_eval/results/{args.model_name_or_path}/generation/"
+    
+    
+    if args.adapter_path is not None:
+        args.model_name = args.adapter_path.split('/')[-1]
+        # e.g., codegen-350M-multi_lora
+    else:
+        args.model_name = args.model_name_or_path.split('/')[-1]
+        # e.g., codegen-350M-multi
+    
+    
+    save_dir = Path(f"correctness_eval/results/{args.loss_mode}/{args.model_name}/generation/")
+    if args.enhance_correctness:
+        save_dir = Path(f"correctness_eval/results/{args.loss_mode}-enhance_correctness/{args.model_name}/generation/")
+            
+        
     os.makedirs(save_dir, exist_ok=True)
 
     # copy the files in path_to_humaneval to save_dir, using copytree
@@ -83,6 +100,7 @@ if __name__ == '__main__':
             data = yaml.load(f, Loader=yaml.FullLoader)
             # properties: name, langauge, prompt, tests, completions, stop_tokens
             prompt = data["prompt"]
+            
             inputs = tokenizer(prompt, return_tensors='pt').to(args.device)
 
             for i in range(args.num_samples // args.batch_size): 
@@ -92,11 +110,10 @@ if __name__ == '__main__':
                         do_sample=True,
                         num_return_sequences=args.batch_size,
                         temperature=0.4,
-                        max_new_tokens=300,
-                        top_p=0.95,
+                        max_new_tokens=200,
+                        # top_p=0.95,
                         pad_token_id=tokenizer.eos_token_id,
                         eos_token_id=tokenizer.eos_token_id,
-                        use_cache=True
                     )
 
                 for sample in samples.tolist():
