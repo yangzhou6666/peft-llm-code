@@ -293,6 +293,11 @@ class SaveBestModelCallback(TrainerCallback):
 
                 if "wandb" in args.report_to:
                     wandb.run.summary["best_evaluation_loss"] = eval_loss
+            
+            if state.global_step % 10 == 0:
+                # just save the model
+                model.save_pretrained(args.output_dir)
+                tokenizer.save_pretrained(args.output_dir)
 
 
 def load_model_and_tokenizer(args):
@@ -357,8 +362,14 @@ def load_model_and_tokenizer(args):
 
 def run_train_hotfix(args):
     # load datasets
-    dataset = load_sstubs_train_dataset()
-    dataset_val = load_sstubs_valid_dataset()
+    if args.dataset == "sstubs":
+        dataset = load_sstubs_train_dataset()
+        dataset_val = load_sstubs_valid_dataset()
+    elif args.dataset == "privacy":
+        dataset = load_privacy_train_dataset()
+        dataset_val = load_privacy_test_dataset()
+    else:
+        raise ValueError(f"Invalid dataset: {args.dataset}")
     
     # dataset = dataset.select(range(10)) # REMEBER TO REMOVE THIS, only for testing purposes
     intent_column = "sub_condition" # prompt to show intent
@@ -495,7 +506,10 @@ def run_train_hotfix(args):
     dataset = dataset.map(tokenize_fn,
                             num_proc=args.num_workers,
                             desc="Generating samples features.")   
-
+    # get all the columns
+    current_data_columns = dataset.column_names
+    # get the intersection of the columns to remove and the current columns
+    columns_to_remove = list(set(columns_to_remove).intersection(set(current_data_columns)))
     dataset = dataset.remove_columns(columns_to_remove)
     dataset_val = dataset_val.map(tokenize_fn,
                             num_proc=args.num_workers,
