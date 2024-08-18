@@ -171,10 +171,18 @@ def load_sstubs_test_dataset():
     pass
 
 def load_privacy_train_dataset():
-    pass
+    paths = [
+        "data_train_privacy/train/EMAIL_AND_IP.jsonl",
+    ]
+    dataset = load_dataset("json", data_files=paths, split="train")
+    return dataset
 
 def load_privacy_test_dataset():
-    pass
+    paths = [
+        "data_train_privacy/val/EMAIL_AND_IP.jsonl",
+    ]
+    dataset = load_dataset("json", data_files=paths, split="train")
+    return dataset
 
 
 def load_codealpaca_train_dataset():
