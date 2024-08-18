@@ -54,8 +54,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", default=8, type=int)
     parser.add_argument("--device", default="cuda", type=str)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=25)
     parser.add_argument("--total_example", type=int, default=1000)
+    parser.add_argument("--enhance_correctness", type=bool, default=False)
 
     args = parser.parse_args()
 
@@ -87,6 +88,12 @@ if __name__ == "__main__":
     
 
     # save the generated code into one file
+    
+
+    if args.adapter_path is not None:
+        # the path will be like adapters/adapter-0
+        # get the model name
+        args.model_name_or_path = args.adapter_path.split('runs/checkpoints/')[-1]
 
     # path: ./detect_pii/sampled_outputs/model_name_or_path
     os.makedirs(f"./detect_pii/sampled_outputs/{args.model_name_or_path}", exist_ok=True)
